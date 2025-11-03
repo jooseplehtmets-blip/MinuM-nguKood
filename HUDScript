@@ -1,0 +1,21 @@
+using System;
+using UnityEngine;
+using TMPro;
+
+public class HUD : MonoBehaviour
+{
+    public static HUD Instance;
+    public TMP_Text coinsText;  
+
+    void Awake() => Instance = this;
+
+    public static void UpdateCoins()
+    {
+        if (Instance == null || GameManagerScript.Instance == null) return;
+
+        int got = GameManagerScript.Instance.collectedCoins;
+        int left = Mathf.Max(0, GameManagerScript.Instance.totalCoins - got);
+
+        Instance.coinsText.text = $"{got}/{left}"; 
+    }
+}
