@@ -1,0 +1,33 @@
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+public class SpikeHazard : MonoBehaviour
+{
+    public string playerTag = "PlayerCharacter";
+    public bool useTrigger = true;
+
+    void Reset()
+    {
+        var col = GetComponent<Collider2D>();
+        if (col) col.isTrigger = true;
+    }
+
+    void OnTriggerEnter2D(Collider2D other)
+    {
+        if (!useTrigger) return;
+        if (other.CompareTag(playerTag))
+            RestartLevel();
+    }
+
+    void OnCollisionEnter2D(Collision2D col)
+    {
+        if (useTrigger) return;
+        if (col.collider.CompareTag(playerTag))
+            RestartLevel();
+    }
+
+    void RestartLevel()
+    {
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+}
