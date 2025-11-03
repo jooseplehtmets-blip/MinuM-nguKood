@@ -1,0 +1,45 @@
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+public class GameManagerScript : MonoBehaviour
+{
+    public static GameManagerScript Instance;
+
+    public int totalCoins { get; private set; }
+    public int collectedCoins { get; private set; }
+
+    void Awake()
+    {
+        if (Instance == null) { Instance = this; DontDestroyOnLoad(gameObject); }
+        else { Destroy(gameObject); return; }
+
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    void OnDestroy()
+    {
+        if (Instance == this)
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    void Start() => RecountCoins();
+    void OnSceneLoaded(Scene s, LoadSceneMode m) => RecountCoins();
+
+    void RecountCoins()
+    {
+        var coins = Object.FindObjectsByType<CoinPickup>(
+            FindObjectsInactive.Exclude,      
+            FindObjectsSortMode.None          
+        );
+
+        totalCoins = coins.Length;
+        collectedCoins = 0;
+        HUD.UpdateCoins();
+    }
+
+    public void RegisterCoinPickup(int value)
+    {
+        collectedCoins += value;
+        HUD.UpdateCoins();
+    }
+}
