@@ -1,0 +1,22 @@
+using UnityEngine;
+
+public class CoinPickup : MonoBehaviour
+{
+    public int value = 1; 
+
+   private void OnTriggerEnter2D(Collider2D other)
+    {
+        if (other.CompareTag("PlayerCharacter"))
+        {
+            Debug.Log($"Picked up coin worth {value}");
+
+            Destroy(gameObject); 
+        }
+        Debug.Log("Object that entered the trigger: " + other);
+
+        if (!other.GetComponentInParent<PlayercharacterControllerScript>()) return;
+
+        GameManagerScript.Instance?.RegisterCoinPickup(value);
+        Destroy(gameObject);
+    }
+}
