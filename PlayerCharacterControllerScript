@@ -1,0 +1,209 @@
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
+
+public class PlayercharacterControllerScript : MonoBehaviour
+{
+    [Header("Input (New Input System)")]
+    public InputAction MoveAction;
+    public InputAction JumpAction;
+
+    [Header("Movement")]
+    // Maksimaalne horisontaalne liikumiskiirus
+    public float moveSpeed = 8f;
+    // Kiirendus maapinnal
+    public float accelGround = 60f;
+    // Aeglustus maapinnal (pidurdus)
+    public float decelGround = 70f;
+    // Kiirendus õhus
+    public float accelAir = 40f;
+    // Aeglustus õhus
+    public float decelAir = 40f;
+
+    [Header("Jump")]
+    // Põhihüppe impulss (üles suunatud kiirus)
+    public float jumpVelocity = 14f;
+    // Lubatud aeg pärast servalt kukkumist, mil saab ikkagi hüpata
+    public float coyoteTime = 0.12f;
+    // Aken enne maandumist, millal hüppenupu vajutus salvestatakse
+    public float jumpBuffer = 0.12f;
+    // Kui hüppenupp vabastada varem, rakendatakse suuremat gravitatsiooni
+    public float lowJumpGravityMultiplier = 2.2f;
+    // Kiirem kukkumine, et hüpe tunduks krõbe/kontrollitav
+    public float fallGravityMultiplier = 2.8f;
+    // Maksimaalne kukkumiskiirus (terminal velocity)
+    public float maxFallSpeed = -35f;
+
+    [Header("Physics")]
+    // Põhigravitatsiooni skaleerimine
+    public float baseGravityScale = 3.5f;
+
+    [Header("Ground Check")]
+    // LayerMask maapinnale/platvormidele
+    public LayerMask groundMask;
+    // Kasti suurus maapinna kontrolliks (laius x kõrgus)
+    public Vector2 groundCheckSize = new Vector2(0.9f, 0.1f);
+    // Kaugus mängija keskpunktist alla, kus kasti kontroll teha
+    public float groundCheckOffsetY = -0.6f;
+
+    
+  
+
+    Rigidbody2D rb;
+    Collider2D col;
+
+    float moveInput;
+    bool isGrounded;
+    float lastGroundedTime;
+    float lastJumpPressedTime;
+    bool jumpHeld;
+
+    void Awake()
+    {
+        rb = GetComponent<Rigidbody2D>();
+        col = GetComponent<Collider2D>();
+
+
+        rb.freezeRotation = true;
+        rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+        rb.gravityScale = baseGravityScale;
+    }
+
+    void OnEnable()
+    {
+        MoveAction.Enable();
+        JumpAction.Enable();
+
+        JumpAction.started += OnJumpStarted;
+        JumpAction.canceled += OnJumpCanceled;
+    }
+
+    void OnDisable()
+    {
+        JumpAction.started -= OnJumpStarted;
+        JumpAction.canceled -= OnJumpCanceled;
+
+        MoveAction.Disable();
+        JumpAction.Disable();
+    }
+
+    void Update()
+    {
+      
+
+        // Sisend
+        Vector2 raw = MoveAction.ReadValue<Vector2>();
+        moveInput = Mathf.Clamp(raw.x, -1f, 1f);
+
+        // Maapinna kontroll
+        isGrounded = CheckGrounded();
+        if (isGrounded)
+            lastGroundedTime = coyoteTime;
+        else
+            lastGroundedTime -= Time.deltaTime;
+
+        // Jump buffer taimer loendab alla
+        if (lastJumpPressedTime > -999f)
+            lastJumpPressedTime -= Time.deltaTime;
+
+        // Gravitatsiooni dünaamika 
+        ApplyBetterJumpGravity();   
+       
+    }
+
+    void FixedUpdate()
+    {
+        // Horisontaalne liikumine sujuva kiirenduse/deceliga
+        float targetSpeed = moveInput * moveSpeed;
+        float speedDiff = targetSpeed - rb.linearVelocity.x;
+
+        bool accelerating = Mathf.Abs(targetSpeed) > 0.01f;
+        float accel = accelerating
+            ? (isGrounded ? accelGround : accelAir)
+            : (isGrounded ? decelGround : decelAir);
+
+        float movement = Mathf.Clamp(speedDiff * accel, -Mathf.Abs(accel), Mathf.Abs(accel)) * Time.fixedDeltaTime;
+
+        rb.linearVelocity = new Vector2(rb.linearVelocity.x + movement, rb.linearVelocity.y);
+
+        // Hüpe käivitamine (coyote + buffer)
+        TryConsumeJump();
+
+        // Piirab maksimaalset kukkumiskiirust
+        if (rb.linearVelocity.y < maxFallSpeed)
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, maxFallSpeed);
+    }
+
+    // Hüpe ja gravitatsiooni loogika
+    void OnJumpStarted(InputAction.CallbackContext ctx)
+    {
+        lastJumpPressedTime = jumpBuffer;
+        jumpHeld = true;
+        Debug.Log("Jump pressed");
+    }
+
+    void OnJumpCanceled(InputAction.CallbackContext ctx)
+    {
+        jumpHeld = false;
+    }
+
+    void TryConsumeJump()
+    {
+        if (lastGroundedTime > 0f && lastJumpPressedTime > 0f)
+        {
+            lastJumpPressedTime = -999f;
+            lastGroundedTime = 0f;
+
+            // Apply jump
+            Vector2 v = rb.linearVelocity;
+            if (v.y < 0f) v.y = 0f;
+            rb.linearVelocity = new Vector2(v.x, jumpVelocity);
+
+        }
+
+    }
+
+    void ApplyBetterJumpGravity()
+    {
+        if (rb.linearVelocity.y < 0f)
+        {
+            rb.gravityScale = baseGravityScale * fallGravityMultiplier;
+        }
+        else if (rb.linearVelocity.y > 0f && !jumpHeld)
+        {
+            rb.gravityScale = baseGravityScale * lowJumpGravityMultiplier;
+        }
+        else
+        {
+            rb.gravityScale = baseGravityScale;
+        }
+    }
+
+    bool CheckGrounded()
+    {
+        Bounds b = col.bounds;
+        float extra = 0.05f; 
+
+        Vector2 boxSize = new Vector2(b.size.x * 0.9f, extra);
+        Vector2 boxCenter = new Vector2(b.center.x, b.min.y - extra * 0.5f);
+
+        Collider2D hit = Physics2D.OverlapBox(boxCenter, boxSize, 0f, groundMask);
+        return hit != null;
+    }
+
+    void OnDrawGizmosSelected()
+    {
+        if (!col) col = GetComponent<Collider2D>();
+        if (!col) return;
+
+        Bounds b = col.bounds;
+        float extra = 0.05f;
+        Vector2 boxSize = new Vector2(b.size.x * 0.9f, extra);
+        Vector2 boxCenter = new Vector2(b.center.x, b.min.y - extra * 0.5f);
+
+        Gizmos.color = Color.green;
+        Gizmos.DrawWireCube(boxCenter, boxSize);
+    }
+
+}
+
